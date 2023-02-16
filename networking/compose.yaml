@@ -1,0 +1,67 @@
+services:
+  backend:
+    build:
+      context: backend
+      target: builder
+    secrets:
+      - db-password
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: wget -q -O - http://localhost:8000 || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+  db:
+    image: postgres
+    restart: always
+    user: postgres
+    secrets:
+      - db-password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=example
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+    expose:
+      - 5432
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  proxy:
+    image: nginx
+    volumes:
+      - type: bind
+        source: ./proxy/nginx.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+    ports:
+      - 80:80
+    depends_on: 
+      backend:
+        condition: service_healthy
+    networks:
+      - backend
+      - web
+
+networks:
+  backend:
+  web:
+    name: example-outsite-web
+
+volumes:
+  db-data:
+
+secrets:
+  db-password:
+    file: db/password.txt
